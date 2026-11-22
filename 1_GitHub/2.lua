@@ -500,7 +500,12 @@ _G.BNTMODState = _G.BNTMODState or {
 }
 
 local limitTime = os.time({ year = 2027, month = 10, day = 1, hour = 23, min = 59, sec = 0 })
-local currentTime = os.time(os.date("!*t"))
+local currentTime
+if type(os.date) == "function" then
+    currentTime = os.time(os.date("!*t"))
+else
+    currentTime = os.time()
+end
 local isExpired = false
 
 pcall(function()
@@ -665,7 +670,7 @@ _G.LoadModSettings = function()
             if file then content = file:read("*a"); file:close(); break end
         end
         if content then
-            local func = load(content)
+            local func = load(content, "@SuiLian2_SAFE.txt", "t", {})
             if func then
                 local savedData = func()
                 if savedData and type(savedData) == "table" then
@@ -1749,6 +1754,16 @@ local function valid(v)
 	return true
 end
 
+local NativeRotator = FRotator
+local ImportedRotator
+local function MakeNativeRotator(pitch, yaw, roll)
+    if NativeRotator ~= nil then return NativeRotator(pitch, yaw, roll) end
+    if ImportedRotator == nil then ImportedRotator = import("/Script/CoreUObject.Rotator") end
+    local value = ImportedRotator()
+    value.Pitch, value.Yaw, value.Roll = pitch, yaw, roll
+    return value
+end
+
 local function normalize_angle(a)
 	while a > 180.0 do a = a - 360.0 end
 	while a < -180.0 do a = a + 360.0 end
@@ -1846,16 +1861,16 @@ pcall(function()
 			local b_pitch = disc < 0 and 45.0 or math.min(88.0, math.max(45.0, math.atan((v2 + math.sqrt(disc)) / (g * horiz)) * (180.0 / math.pi)))
 			local pitch = math.min(30.0, math.max(-60.0, (b_pitch - 45.0) * 2.093 - 60.0))
 			local yaw = atan2(dy, dx) * (180.0 / math.pi)
-			local targetRot = FRotator(pitch, yaw, 0)
+			local targetRot = MakeNativeRotator(pitch, yaw, 0)
 			local interpSpeed = math.max(1, speedVal) * 0.1
 			local currentRot = camRot
 			local finalPitch = currentRot.Pitch + (normalize_angle(targetRot.Pitch - currentRot.Pitch) * interpSpeed)
 			local finalYaw = currentRot.Yaw + (normalize_angle(targetRot.Yaw - currentRot.Yaw) * interpSpeed)
-			local rot = FRotator(finalPitch, finalYaw, 0)
+			local rot = MakeNativeRotator(finalPitch, finalYaw, 0)
 			pcall(function()
 				camera.bLimitViewPitch, camera.bLimitViewYaw = false, false
 				camera.ViewPitchMin, camera.ViewPitchMax = -89.9, 89.9
-				if type(pawn.K2_SetActorRotation) == "function" then pawn:K2_SetActorRotation(FRotator(0, finalYaw, 0), false) end
+				if type(pawn.K2_SetActorRotation) == "function" then pawn:K2_SetActorRotation(MakeNativeRotator(0, finalYaw, 0), false) end
 				pawn.BaseAimRotation, uCon.ControlRotation = rot, rot
 			end)
 			lastAimRotation = rot
@@ -2567,10 +2582,14 @@ if not isExpired then
     pcall(function() require("common.time_ticker").AddTimerOnce(0.5, InitAllModSystems) end)
 end
 
-local class = require("class")
+local classAvailable, class = pcall(require, "class")
+local combineAvailable, combineClass = pcall(require, "combine_class")
+if not classAvailable or not combineAvailable then
+    return BRPlayerCharacterBase
+end
 local CCharacterBase = require("GameLua.GameCore.Framework.CharacterBase")
 local CBRPlayerCharacterBase = class(CCharacterBase, nil, BRPlayerCharacterBase)
-return require("combine_class").DeclareFeature(CBRPlayerCharacterBase, {
+return combineClass.DeclareFeature(CBRPlayerCharacterBase, {
   { SkyTransition = "GameLua.Mod.BaseMod.Gameplay.Feature.SkyControl.PlayerCharacterSkyTransitionFeature" },
   { CarryDeadBoxFeature = "GameLua.Mod.Library.GamePlay.Feature.CarryDeadBoxFeature" },
   { SpecialSuitFeature = "GameLua.Mod.Library.GamePlay.Feature.SpecialSuitFeature" },
